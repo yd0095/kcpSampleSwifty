@@ -11,79 +11,81 @@ import WebKit
 
 
 class ViewController: UIViewController {
-
-
+    
     @IBOutlet weak var myWebView: WKWebView!
     
     func loadWebPage(url: String) {
+        
         let myUrl = URL(string: url)
         let myRequest = URLRequest(url: myUrl!)
         myWebView.load(myRequest)
         
-        //this is a program which just opens the website that is mentioned in github
-        
     }
     
     override func viewDidLoad() {
+        
         super.viewDidLoad()
         
+        //fortest
+        
+        
         self.myWebView.navigationDelegate = self
-        // Do any additional setup after loading the view.
-        loadWebPage(url : "https://www.iamport.kr/demo")
         
-        //myWebView.
+        //open in demo webpage
+        //loadWebPage(url : "https://www.iamport.kr/demo")
+        
+        //open in HTML source
+        let myHTMLBundle = Bundle.main.url(forResource: "IamportTest", withExtension: "html")!
+        let myRequest = URLRequest(url: myHTMLBundle)
+        myWebView.load(myRequest)
         
     }
-    
-    func landRedirectUrl (_ landing_url : String){
-        let url :URL? = URL(string: landing_url)
-        var request = URLRequest.init(url: url!)
-        request.httpMethod = "GET"
-        myWebView.load(request)
-    }
-    
 }
-
 
 // MARK: - IAMPORT KCP WEBVIEW TO CHECK ISP AND URL FROM OTHER REQUEST
 
 extension ViewController: WKNavigationDelegate {
-//shouldStartLoadWithRequest webkit ver
+    
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         
-        // decisionHandler 중복호출을 피하기위한 closure 작성하여 policy를 도출
-        let navigationPolicyBasedOnUrlScheme = { () -> WKNavigationActionPolicy in
+        let request = navigationAction.request
+        guard let url = request.url else { return }
         
-            let request = navigationAction.request
-            //let url != nil didn't consider about when url is nil.
-            let urlString = request.url!.absoluteString
-            
-            let bAppStoreURL : Bool = urlString.range(of: "phobos.apple.com") != nil
-            let bAppStoreURL2 : Bool = urlString.range(of: "itunes.apple.com") != nil
-            
-            if bAppStoreURL || bAppStoreURL2 {
+        // decisionHandler 중복호출을 피하기위해 closure 작성하여 policy를 도출
+        let navigationPolicyBasedOnUrlScheme = { () -> WKNavigationActionPolicy in
+            //HTML로 실행했을 시 file:// scheme에 대한 권한부여 위함
+            if url.scheme == "file" {
+                print("webview에 요청된 url==> \(url.absoluteString)")
+                return .allow
+            }
+            //APP STORE URL 경우 openURL 함수를 통해 앱스토어 어플을 활성화
+            if url.isAppStoreUrl {
                 UIApplication.shared.open(request.url!, options: [:], completionHandler: nil) //?
                 return .cancel
             }
-            //isp 호출
-            if urlString.hasPrefix("ispmobile://") {
-                let appURL :URL? = URL(string: urlString)
+            
+            // URL scheme이 ISP를 요구 시 App존재여부 확인 후 Open/Download
+            if url.needsIspAuthentication {
+                let appURL = URL(string: url.absoluteString)
                 if UIApplication.shared.canOpenURL(appURL!) {
+                    print("mobile isp checked")
                     UIApplication.shared.open(appURL!, options: [:], completionHandler: nil)
+                    //debug용
+                     print("webview에 요청된 url==> \(url.absoluteString)")
+                    
+                    return .allow
                 } else {
                     //alert
                     self.showAlertViewWithEvent("모바일 ISP가 설치되어 있지 않아 \n App Store로 이동합니다.", tagNum: 99)
+                    
                     return .cancel
                 }
             }
+
+            print("webview에 요청된 url==> \(url.absoluteString)")
             
-            //기타(금결원 실시간계좌이체 등
-            let strHttp: String = "http://"
-            let strHttps: String = "https://"
-            let reqUrl : String? = request.url!.absoluteString
-            print("webview에 요청된 url==> \(reqUrl!)")
-            
-            if reqUrl?.hasPrefix(strHttp) != true && reqUrl?.hasPrefix(strHttps) != true {
+            //기타(금결원 실시간계좌이체 등) http scheme이 들어왔을 경우 URL을 Open하기 위함
+            if !url.isHttpOrHttps {
                 UIApplication.shared.open(request.url!, options: [:], completionHandler: nil)
                 return .cancel
             }
@@ -93,13 +95,15 @@ extension ViewController: WKNavigationDelegate {
         decisionHandler(
             navigationPolicyBasedOnUrlScheme())
     }
+    
 }
 
-// MARK: - IAMPORT KCP ALERT To Open ISP DOWNLOAD URL FROM APP STORE
+// MARK: - IAMPORT KCP ALERT TO OPEN ISP DOWNLOAD URL FROM APP STORE
 
 extension ViewController: UIAlertViewDelegate {
 
     func showAlertViewWithEvent(_ msg : String, tagNum tag : Int) {
+        
         let alert : UIAlertController = UIAlertController(title: "알림", message: "_msg", preferredStyle: .alert)
         
         alert.view.tag = tag
@@ -115,5 +119,11 @@ extension ViewController: UIAlertViewDelegate {
         
         alert.addAction(okAction)
         alert.present(alert, animated: true, completion: nil)
+        
     }
+    
 }
+
+
+
+
